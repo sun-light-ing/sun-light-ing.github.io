@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="zh-cn"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=Edge"><meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no"><meta name="format-detection" content="telephone=no"><meta name="format-detection" content="email=no"><meta name="description" content=""><meta name="keywords" content="Hexo, Gruntjs, Nodejs, Reactjs, Vuejs"><title>一次服务器被挖矿的经历 - Bayueliuhuo</title><link rel="stylesheet" href="/css/main_style.min.css"><link rel="icon" href="https://wx.qlogo.cn/mmopen/aBBW04NrfYddKBmP8TNU5AR4CR7HCxicI0TjYHFeQouic5icAEXQ0U4WsQiaxK6NWMB5MfMXPFUM5hs4WOROdib8x0JfMTxiaMoGtZl4oibLabMqMJP7fRVrFlcxer54Y0yH02p/0"><meta name="generator" content="Hexo 7.3.0"></head><body><input id="navi" type="checkbox"><ul class="main-navication"><li><a href="/"><span>Home</span></a></li><li><a target="_blank" rel="noopener" href="https://github.com"><span>Github</span></a></li><li><a target="_blank" rel="noopener" href="https://www.v2ex.com/"><span>V2EX</span></a></li></ul><div class="wrapper" id="wrap"><div class="post-header"><label class="navi-button light" for="navi">MENU</label><img class="background" src="https://images.unsplash.com/photo-1721141025940-178650e08b4b?q=80&amp;w=2672&amp;auto=format&amp;fit=crop&amp;ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"><div class="post-title"><h1 class="title">一次服务器被挖矿的经历</h1><ul class="meta"><li><i class="icon icon-author"></i>Bayueliuhuo</li><li><i class="icon icon-clock"></i>3 Minutes</li><li><i class="icon icon-calendar"></i>August 2, 2024</li></ul></div></div><div class="article-content" style="max-width:800px"><h1 style="text-align:center;color:green">一次服务器被挖矿的经历</h1>
+
+<p>昨晚10点28分收到了腾讯云短信通知，说是服务器被植入了恶意文件，并且给出了恶意文件存在的目录 <i style="color: red">&#x2F;tmp&#x2F;kinsing</i>和<i style="color: red">&#x2F;tmp&#x2F;kdevtmpfsi</i></p>
+<p><img src="/images/1.jpg"></p>
+<p>我立刻网上搜索了一下 kdevtmpfsi和kinsing，是挖矿病毒，大多数都是redis和postgresql 程序侵入，而且受害者还不少，通常比较明显就是 占用高额的CPU、内存资源。</p>
+<p>阿里云公布的威胁快报：<a target="_blank" rel="noopener" href="https://yq.aliyun.com/articles/741602">https://yq.aliyun.com/articles/741602</a></p>
+<p>Redis RCE导致h2Miner蠕虫病毒，其利用Redis未授权或弱口令作为入口，使用主从同步的方式从恶意<a target="_blank" rel="noopener" href="https://so.csdn.net/so/search?q=%E6%9C%8D%E5%8A%A1%E5%99%A8&spm=1001.2101.3001.7020">服务器</a>上同步恶意module，之后在目标机器上加载此恶意module并执行恶意指令。在以往常见的攻击者或蠕虫中，其大多都沿用登陆redis后写入定时任务或写ssh key的方式进行入侵，这种方式受权限与系统类型影响并不一定能够成功。而此次使用redis加载module的攻击方式，可以直接执行任意指令或拿到shell交互环境，危害极大。</p>
+<p>那怎么解决呢？</p>
+<p>根据搜索到的结果，会导致CPU飙升，使用top命令，查看各进程占用的CPU资源</p>
+<p><img src="/images/2.png"></p>
+<p>果然，第一个进程(kdevtmpfsi)使用太多CPU资源，在一众进程中显得尤为突出。</p>
+<p>再来看看定时任务，本台机器事先并没有任何定时任务</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">crontab -l</span><br></pre></td></tr></table></figure>
+
+<p>结果显示如下：确实出现一条不知名的定时任务</p>
+<p><img src="/images/3.png"></p>
+<p>执行命令，进入定时任务列表中，把这条定时任务删除</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">crontab -e</span><br></pre></td></tr></table></figure>
+
+
+
+<p>然后进入到&#x2F;tmp目录，把这两个恶意文件删除掉</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">rm</span> -rf kinsing</span><br><span class="line"></span><br><span class="line"><span class="built_in">rm</span> -rf kdevtmpfsi</span><br></pre></td></tr></table></figure>
+
+
+
+<p>接着，查找这2个恶意文件的进程，并且使用 kill -9 PID 杀死对应的进程</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">ps -ef | grep kdevtmpfsi</span><br><span class="line"></span><br><span class="line"><span class="built_in">kill</span> -9 pid </span><br><span class="line"></span><br><span class="line">ps -ef | grep kinsing </span><br><span class="line"></span><br><span class="line"><span class="built_in">kill</span> -9 pid</span><br></pre></td></tr></table></figure>
+
+
+
+<p>然后，再次确定恶意文件所在位置以便删除，使用rm -rf 所在位置的恶意程序</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">find / -iname kdevtmpfs</span><br><span class="line"><span class="built_in">rm</span> -rf kdevtmpfs</span><br><span class="line"></span><br><span class="line">find / -iname kinsing</span><br><span class="line"><span class="built_in">rm</span> -rf kinsing</span><br></pre></td></tr></table></figure>
+
+<p><img src="/images/4.png"></p>
+<p>最后，使用top命令查看CPU资源的占用情况，不出意外，恶意程序已经被彻底清除</p>
+<p><img src="/images/5.png"></p>
+</div><div class="article-meta" style="max-width:800px"></div><div class="article-comment" style="max-width:800px"><div class="ds-thread" id="ds-thread" data-thread-key="clzcat71o00018pfy0vci8lp5" data-title="一次服务器被挖矿的经历" data-url="https://sun-light-ing.github.io/2024/08/02/his/" site-name="ueibo"></div><script>var siteName = document.getElementById('ds-thread').getAttribute('site-name');
+var duoshuoQuery = {short_name: siteName};
+(function() {
+  var ds = document.createElement('script');
+  ds.type = 'text/javascript';ds.async = true;
+  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+  ds.charset = 'UTF-8';
+  (document.getElementsByTagName('head')[0] 
+  || document.getElementsByTagName('body')[0]).appendChild(ds);
+})();</script></div><ul class="navication"><li class="home"><a href="/"><i class="icon icon-home"></i></a></li><li><a href="/2024/08/01/profile/"><i class="icon icon-arror-right"></i></a></li></ul><div class="page-footer"><div class="top"><ul class="social"><li><a href="https://github.com/sun-light-ing" title="Github" target="_blank"><i class="icon icon-github"></i></a></li><li><a title="Weibo" target="_blank"><i class="icon icon-weibo"></i></a></li><li><a title="bilibili" target="_blank"><i class="icon icon-bilibili"></i></a></li></ul></div><div class="bottom"><p class="copyright">© 2024 Bayueliuhuo</p></div></div></div><script>var wrap = document.getElementById('wrap');
+window.onload = function () {
+  wrap.className += ' done';
+}</script></body></html>
